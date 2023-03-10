@@ -1,0 +1,38 @@
+.tab-content {
+  width: 100%;
+}
+
+.custom-shadow {
+  box-shadow: 0 3px 6px 3px lightgray;
+}
+
+.kebab-menu-icon {
+  width: 20px;
+  font-weight: 800;
+  cursor: pointer;
+  color: gray;
+}
+
+.kebab-menu-icon:hover {
+  color: black;
+}
+
+.kebab-menu-content {
+  list-style: none;
+  width: 120px;
+  height: 140px;
+  padding: 8px 0;
+  position: absolute;
+  background-color: white;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+.kebab-menu-content > li {
+  padding: 4px 16px;
+  cursor: pointer;
+}
+
+.kebab-menu-content > li:hover {
+  background-color: lightgray;
+}
