@@ -1,5 +1,5 @@
 import React, { Key, useEffect, useState } from "react";
-import { useQuery } from "@apollo/client";
+import { useQuery, useMutation } from "@apollo/client";
 import {
   Container,
   Row,
@@ -12,30 +12,43 @@ import {
 } from "react-bootstrap";
 import { Search, PlusCircle } from "react-bootstrap-icons";
 
-import { GET_LEADS } from "./queries";
+import { CREATE_LEAD, DELETE_LEAD, GET_LEADS, UPDATE_LEAD } from "./queries";
 import "./index.css";
-import TableRow from "../../components/table-row";
 import AddLeadForm from "../../components/add-lead-form";
+import Table from "react-bootstrap/Table";
+import moment, { MomentInput } from "moment";
+import { startCase } from "lodash";
+import Action from "../../components/action";
 
 export interface Lead {
-  id: String;
+  id?: string;
   attributes: {
-    Name: String;
-    email: String;
-    Source: String;
-    Status: String;
-    Notes: String;
-    createdAt: String;
-    updatedAt: String;
+    Name: string;
+    email: string;
+    Source: string;
+    Status: string;
+    Notes: string;
+    createdAt?: string;
+    updatedAt?: string;
   };
 }
+
+const INITIAL_LEAD = {
+  attributes: {
+    Name: "",
+    email: "",
+    Notes: "",
+    Source: "",
+    Status: "",
+  },
+};
 
 export default function Clients() {
   const [leads, setLeads] = useState<Array<Lead>>([]);
   const [filteredLeads, setFilteredLeads] = useState<Array<Lead>>([]);
   const [searchText, setSearchText] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<Lead>(INITIAL_LEAD);
   const [viewMode, setViewMode] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
 
@@ -56,11 +69,53 @@ export default function Clients() {
       setLeads(res.leads.data);
       setFilteredLeads(res.leads.data);
     },
+    nextFetchPolicy: "cache-only",
+  });
+
+  const [createLead] = useMutation(CREATE_LEAD, {
+    variables: { lead: selectedLead?.attributes },
+    onCompleted: (data) => {
+      const newLeads = [data.createLead.data, ...leads];
+      handleAddModalClose();
+      setAlertMessage("Lead added successfully");
+      setLeads(newLeads);
+    },
+  });
+
+  const [updateLead] = useMutation(UPDATE_LEAD, {
+    variables: {
+      lead: {
+        Name: selectedLead.attributes.Name,
+        email: selectedLead.attributes.email,
+        Notes: selectedLead.attributes.Notes,
+        Source: selectedLead.attributes.Source,
+        Status: selectedLead.attributes.Status,
+      },
+      id: selectedLead?.id,
+    },
+    onCompleted: (data) => {
+      const newLeads = [...leads];
+      newLeads.forEach((lead, index) => {
+        if (lead.id === data.updateLead.data?.id) {
+          newLeads[index] = data.updateLead.data;
+        }
+      });
+      handleAddModalClose();
+      setAlertMessage("Lead updated successfully");
+      setLeads(newLeads);
+    },
+  });
+
+  const [deleteLead] = useMutation(DELETE_LEAD, {
+    onCompleted: (data) => {
+      setLeads(leads.filter((lead) => lead.id !== data.deleteLead.data.id));
+      setAlertMessage("Lead deleted successfully");
+    },
   });
 
   const handleAddModalClose = () => {
     setShowAddModal(false);
-    setSelectedLead(null);
+    setSelectedLead(INITIAL_LEAD);
     setViewMode(false);
   };
 
@@ -76,42 +131,20 @@ export default function Clients() {
   };
 
   const handleDeleteLead = (id) => {
-    setLeads(leads.filter((lead) => lead.id !== id));
-    setAlertMessage("Lead deleted successfully");
+    deleteLead({
+      variables: {
+        id,
+      },
+    });
   };
 
   const handleSave = () => {
     if (selectedLead) {
-      const date = new Date().toISOString();
-      let selectedIndex = -1;
-      const newLeads = [...leads];
-      newLeads.forEach((lead, index) => {
-        if (lead.id === selectedLead?.id) {
-          selectedIndex = index;
-        }
-      });
-      if (selectedIndex >= 0) {
-        newLeads[selectedIndex] = {
-          ...selectedLead,
-          attributes: {
-            ...selectedLead.attributes,
-            updatedAt: date,
-          },
-        };
-        setAlertMessage("Lead modified successfully");
+      if (selectedLead.id) {
+        updateLead();
       } else {
-        newLeads[newLeads.length] = {
-          ...selectedLead,
-          attributes: {
-            ...selectedLead.attributes,
-            createdAt: date,
-            updatedAt: date,
-          },
-        };
-        setAlertMessage("Lead added successfully");
+        createLead();
       }
-      setLeads(newLeads);
-      handleAddModalClose();
     }
   };
 
@@ -137,108 +170,103 @@ export default function Clients() {
               eventKey="clients"
               title="Clients"
             >
-              <Container fluid>
-                <Row className="my-4">
-                  <Col
-                    xs={12}
-                    md={6}
-                    lg={5}
-                    xl={4}
-                    className="d-flex align-items-center py-2"
+              <Row className="my-4">
+                <Col
+                  xs={12}
+                  md={6}
+                  lg={5}
+                  xl={4}
+                  className="d-flex align-items-center py-2"
+                >
+                  <Search
+                    size={24}
+                    className="mr-2"
+                  />
+                  <Form.Control
+                    type="text"
+                    placeholder="Search"
+                    className="w-100"
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                  />
+                </Col>
+                <Col
+                  xs={0}
+                  md={2}
+                  lg={4}
+                  xl={6}
+                ></Col>
+                <Col
+                  xs={12}
+                  md={4}
+                  lg={3}
+                  xl={2}
+                  className="d-flex justify-content-end py-2"
+                >
+                  <Button
+                    onClick={() => setShowAddModal(true)}
+                    variant="outline-none"
+                    className="font-weight-bold custom-shadow d-flex align-items-center justify-content-center py-2 px-4 rounded w-100"
                   >
-                    <Search
-                      size={24}
-                      className="mr-2"
+                    Add Lead{" "}
+                    <PlusCircle
+                      size={20}
+                      className="ml-2"
                     />
-                    <Form.Control
-                      type="text"
-                      placeholder="Search"
-                      className="w-100"
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                    />
-                  </Col>
-                  <Col
-                    xs={0}
-                    md={2}
-                    lg={4}
-                    xl={6}
-                  ></Col>
-                  <Col
-                    xs={12}
-                    md={4}
-                    lg={3}
-                    xl={2}
-                    className="d-flex justify-content-end py-2"
-                  >
-                    <Button
-                      onClick={() => {
-                        setShowAddModal(true);
-                        setSelectedLead({
-                          id: leads.length.toString(),
-                          attributes: {
-                            Name: "",
-                            email: "",
-                            Notes: "",
-                            Source: "",
-                            Status: "",
-                            createdAt: "",
-                            updatedAt: "",
-                          },
-                        });
-                      }}
-                      variant="outline-none"
-                      className="font-weight-bold custom-shadow d-flex align-items-center justify-content-center py-2 px-4 rounded w-100"
-                    >
-                      Add Lead{" "}
-                      <PlusCircle
-                        size={20}
-                        className="ml-2"
-                      />
-                    </Button>
-                    <AddLeadForm
-                      show={showAddModal}
-                      onHide={handleAddModalClose}
-                      viewMode={viewMode}
-                      selectedLead={selectedLead}
-                      setSelectedLead={setSelectedLead}
-                      onSave={handleSave}
-                    />
-                  </Col>
-                </Row>
-                <Row className="border-bottom font-weight-bold px-2 lead d-none d-md-flex">
-                  <Col
-                    md={2}
-                    className="pb-2"
-                  >
-                    Lead Date
-                  </Col>
-                  <Col md={2}>Name</Col>
-                  <Col md={3}>Email</Col>
-                  <Col md={1}>Source</Col>
-                  <Col md={2}>Last Updated</Col>
-                  <Col md={1}>Status</Col>
-                  <Col md={1}></Col>
-                </Row>
-                {filteredLeads.length === 0 ? (
-                  <Alert
-                    variant="light"
-                    className="d-flex justify-content-center"
-                  >
-                    No data found
-                  </Alert>
-                ) : (
-                  filteredLeads.map((lead) => (
-                    <TableRow
-                      key={lead.id as Key}
-                      lead={lead}
-                      onViewLead={() => handleViewLead(lead)}
-                      onEditLead={() => handleEditLead(lead)}
-                      onDeleteLead={() => handleDeleteLead(lead.id)}
-                    />
-                  ))
-                )}
-              </Container>
+                  </Button>
+                  <AddLeadForm
+                    show={showAddModal}
+                    onHide={handleAddModalClose}
+                    viewMode={viewMode}
+                    selectedLead={selectedLead}
+                    setSelectedLead={setSelectedLead}
+                    onSave={handleSave}
+                  />
+                </Col>
+              </Row>
+              <Table responsive>
+                <thead>
+                  <tr>
+                    <th>Lead Date</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Source</th>
+                    <th>Last Updated</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLeads.map((lead) => (
+                    <tr key={lead.id as Key}>
+                      <td>
+                        {moment(
+                          lead.attributes.createdAt as MomentInput
+                        ).format("MMM D, YYYY")}{" "}
+                        {moment(
+                          lead.attributes.createdAt as MomentInput
+                        ).format("h:mm A")}
+                      </td>
+                      <td>{lead.attributes.Name}</td>
+                      <td>{lead.attributes.email}</td>
+                      <td>{startCase(lead.attributes.Source)}</td>
+                      <td>
+                        {moment(
+                          lead.attributes.updatedAt as MomentInput
+                        ).format("D MMMM YYYY")}
+                      </td>
+                      <td>{startCase(lead.attributes.Status)}</td>
+                      <td>
+                        <Action
+                          onViewLead={() => handleViewLead(lead)}
+                          onEditLead={() => handleEditLead(lead)}
+                          onDeleteLead={() => handleDeleteLead(lead.id)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
             </Tab>
             <Tab
               eventKey="tab1"
